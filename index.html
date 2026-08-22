@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Timeout-Resistant Query</title>
+  <style>
+    :root { color-scheme: dark; --bg: #0a0e17; --panel: #111827; --line: #263247; --text: #ecf2ff; --muted: #9aa9c1; --accent: #57b6ff; --good: #58d6a3; --bad: #ff8392; }
+    * { box-sizing: border-box; }
+    body { min-height: 100vh; margin: 0; display: grid; grid-template-rows: 1fr auto; background: radial-gradient(circle at top, #162542, var(--bg) 45%); color: var(--text); font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+    main { width: min(780px, calc(100% - 32px)); margin: auto; padding: 48px 0; }
+    .card { padding: clamp(24px, 5vw, 44px); border: 1px solid var(--line); border-radius: 20px; background: rgba(17, 24, 39, .88); box-shadow: 0 20px 70px rgba(0, 0, 0, .3); }
+    .eyebrow { margin: 0 0 12px; color: var(--accent); font-size: .76rem; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { margin: 0; font-size: clamp(1.9rem, 5vw, 2.8rem); letter-spacing: -.04em; }
+    .intro { margin: 14px 0 30px; color: var(--muted); line-height: 1.55; }
+    .scope { margin: -18px 0 30px; color: var(--muted); font-size: .85rem; line-height: 1.5; }
+    label { display: block; margin-bottom: 9px; font-weight: 650; font-size: .9rem; }
+    .controls { display: flex; gap: 12px; }
+    input { min-width: 0; flex: 1; padding: 14px 15px; border: 1px solid var(--line); border-radius: 10px; outline: none; background: #0b1220; color: var(--text); font: inherit; }
+    input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(87, 182, 255, .16); }
+    button { padding: 0 18px; border: 0; border-radius: 10px; background: var(--accent); color: #07111f; cursor: pointer; font: inherit; font-weight: 750; }
+    button:hover { filter: brightness(1.08); } button:disabled { cursor: wait; opacity: .65; }
+    .progress { height: 4px; margin-top: 20px; overflow: hidden; border-radius: 99px; background: #1b273b; opacity: 0; transition: opacity .2s; }
+    .progress.active { opacity: 1; } .progress::before { display: block; width: 35%; height: 100%; background: linear-gradient(90deg, transparent, var(--accent), transparent); content: ""; animation: scan 1.1s infinite ease-in-out; }
+    @keyframes scan { from { transform: translateX(-110%); } to { transform: translateX(320%); } }
+    #status { min-height: 24px; margin: 20px 0 10px; color: var(--muted); font-size: .94rem; } #status.success { color: var(--good); } #status.error { color: var(--bad); }
+    pre { min-height: 150px; max-height: 380px; margin: 0; overflow: auto; padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: #080d16; color: #c9d8ef; font: .85rem/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; }
+    footer { padding: 22px; border-top: 1px solid rgba(154, 169, 193, .12); color: var(--muted); text-align: center; font-size: .9rem; }
+    @media (max-width: 600px) { .controls { flex-direction: column; } button { min-height: 48px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="card" aria-labelledby="title">
+      <p class="eyebrow">Secure upstream request</p>
+      <h1 id="title">Initialize a query</h1>
+      <p class="intro">Submit an approved HTTP or HTTPS endpoint, including an allowlisted LAN device, and inspect its response.</p>
+      <p class="scope">Only exact device IPs configured in the backend allowlist can be queried on your LAN.</p>
+      <form id="query-form">
+        <label for="target-url">Target HTTP or HTTPS URL</label>
+        <div class="controls">
+          <input id="target-url" name="target-url" type="url" value="https://jsonplaceholder.typicode.com/todos/1" required autocomplete="url" spellcheck="false">
+          <button id="query-button" type="submit">Initialize Query</button>
+        </div>
+      </form>
+      <div id="progress" class="progress" role="progressbar" aria-label="Query in progress" aria-hidden="true"></div>
+      <div id="status" role="status" aria-live="polite">Ready to initialize a query.</div>
+      <pre id="output" aria-live="polite">Awaiting a response…</pre>
+    </section>
+  </main>
+  <footer>Credits - Made by Arnav</footer>
+
+  <script>
+    async function resilientFetch(url, options = {}) {
+      const { maxRetries = 3, requestTimeoutMs = 30000, ...fetchOptions } = options;
+      let lastError;
+
+      for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
+
+        try {
+          const response = await fetch(url, { ...fetchOptions, signal: controller.signal });
+          if (!response.ok) {
+            const error = new Error(`Request failed with HTTP ${response.status}`);
+            error.responseBody = await response.text();
+            throw error;
+          }
+          return response;
+        } catch (error) {
+          if (controller.signal.aborted) {
+            lastError = new Error("RequestTimeoutError", { cause: error });
+            lastError.name = "RequestTimeoutError";
+          } else {
+            lastError = error;
+          }
+          if (attempt === maxRetries) throw lastError;
+        } finally {
+          clearTimeout(timeoutId);
+        }
+      }
+      throw lastError;
+    }
+
+    const form = document.querySelector("#query-form");
+    const input = document.querySelector("#target-url");
+    const button = document.querySelector("#query-button");
+    const progress = document.querySelector("#progress");
+    const status = document.querySelector("#status");
+    const output = document.querySelector("#output");
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const targetUrl = input.value.trim();
+      button.disabled = true;
+      progress.classList.add("active");
+      progress.setAttribute("aria-hidden", "false");
+      status.className = "";
+      status.textContent = "Initializing query…";
+      output.textContent = "Processing request…";
+
+      try {
+        const response = await resilientFetch("/api/fetch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ target_url: targetUrl }),
+          requestTimeoutMs: 30000,
+        });
+        const result = await response.json();
+        status.className = "success";
+        status.textContent = "Query completed successfully.";
+        output.textContent = JSON.stringify(result, null, 2);
+      } catch (error) {
+        status.className = "error";
+        status.textContent = "Query failed.";
+        try {
+          output.textContent = JSON.stringify(JSON.parse(error.responseBody), null, 2);
+        } catch {
+          output.textContent = error.message || "An unexpected error occurred.";
+        }
+      } finally {
+        button.disabled = false;
+        progress.classList.remove("active");
+        progress.setAttribute("aria-hidden", "true");
+      }
+    });
+  </script>
+</body>
+</html>
