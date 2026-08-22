@@ -15,11 +15,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-# Reuse Uvicorn's configured logger so INFO messages appear in its terminal.
 logger = logging.getLogger("uvicorn.error")
 
-# uvloop is faster on Unix-like systems, but it has no native Windows support.
-# FastAPI/AnyIO continue to use Windows' default event loop on Windows.
 if sys.platform != "win32":
     try:
         import uvloop
@@ -48,15 +45,11 @@ app = FastAPI(title="Timeout-Resistant Service", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    # This service is intended for local use. Do not expose it to every website.
     allow_origins=["http://127.0.0.1:8000", "http://localhost:8000"],
     allow_methods=["POST"],
     allow_headers=["Content-Type"],
 )
 
-# LAN-safe allowlist (reapplied 2026-08-20): outbound requests are restricted
-# to reviewed public APIs and exact local devices. Never use wildcards or
-# network ranges in this allowlist.
 ALLOWED_HOSTS = frozenset({
     "jsonplaceholder.typicode.com",
     "httpbin.org",
@@ -97,7 +90,6 @@ async def validate_target_url(url: str) -> str:
 
     try:
         parsed = urlsplit(url)
-        # Omitted ports follow the URL scheme: HTTP=80, HTTPS=443.
         port = parsed.port or (80 if parsed.scheme == "http" else 443)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Target URL has an invalid port.") from exc
@@ -111,9 +103,7 @@ async def validate_target_url(url: str) -> str:
     if port not in ALLOWED_PORTS:
         raise HTTPException(status_code=403, detail="This port is not approved for outbound requests.")
 
-    # httpx performs its own lookup when connecting, so this check does not pin
-    # the socket to an address. Exact trusted-host allow-listing is the primary
-    # control; production deployments should also enforce egress firewall rules.
+    
     addresses = await anyio.to_thread.run_sync(resolve_host, parsed.hostname, port)
     for address in addresses:
         ip = ipaddress.ip_address(address)
@@ -121,9 +111,7 @@ async def validate_target_url(url: str) -> str:
             logger.warning("Blocked protected address %s for host %s", address, parsed.hostname)
             raise HTTPException(status_code=403, detail="Target resolves to a protected network address.")
 
-        # A private target is permitted only when the URL host is that exact
-        # IP address and it has been explicitly approved above. This keeps a
-        # public hostname from becoming a private-network pivot through DNS.
+       
         if ip.is_private and (parsed.hostname != address or parsed.hostname not in ALLOWED_HOSTS):
             logger.warning("Blocked unapproved private address %s for host %s", address, parsed.hostname)
             raise HTTPException(status_code=403, detail="Target resolves to an unapproved private network address.")
@@ -137,7 +125,7 @@ async def fetch_with_retry(client: httpx.AsyncClient, url: str, max_retries: int
     to prevent synchronization storms on failing connections.
     """
     attempt = 0
-    base_delay = 0.5  # 500ms initial delay
+    base_delay = 0.5  
 
     while attempt < max_retries:
         try:
@@ -166,8 +154,6 @@ async def fetch_with_retry(client: httpx.AsyncClient, url: str, max_retries: int
 
             logger.info("200 OK: fetched %s", url)
             return data
-        # Covers timeouts, connection resets, protocol errors, and other
-        # transport failures that can occur while streaming the response body.
         except httpx.TransportError as exc:
             attempt += 1
             if attempt >= max_retries:
