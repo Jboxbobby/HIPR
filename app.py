@@ -57,7 +57,7 @@ ALLOWED_HOSTS = frozenset({
     "192.168.1.50",
 })
 ALLOWED_PORTS = frozenset({80, 443, 8080, 3000, 5000})
-MAX_RESPONSE_BYTES = 1_000_000  # 1 MiB
+MAX_RESPONSE_BYTES = 1_000_000 
 PROJECT_DIR = Path(__file__).resolve().parent
 
 CUSTOM_TIMEOUT = httpx.Timeout(
