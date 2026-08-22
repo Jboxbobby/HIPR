@@ -33,4 +33,10 @@ cd HIPR
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
+```
 
+### 2. Run the Service
+```bash
+python app.py
+```
+Open your browser and navigate to http://localhost:8000 (or http://127.0.0.1:8000) to access the interactive web interface.
