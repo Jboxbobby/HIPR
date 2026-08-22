@@ -21,6 +21,7 @@ Local LAN Monitoring: Approved devices like http://192.168.1.1
 SSRF Protection Check: Attempting to query http://127.0.0.1:8000 or cloud metadata http://169.254.169.254 triggers an immediate 403 Forbidden.
 
 Dropped Connection Handling: Unreachable allowlisted hosts automatically trigger 3 jittered retries before returning a 504 Gateway Timeout
+
 ---
 
 ## Quick Start
