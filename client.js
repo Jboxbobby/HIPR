@@ -1,7 +1,4 @@
-/**
- * Retries a request to this service. The timeout is an end-to-end request
- * deadline; browser fetch cannot isolate TCP connection time from response time.
- */
+
 export async function resilientFetch(url, options = {}) {
   const {
     maxRetries = 3,
@@ -38,7 +35,6 @@ export async function resilientFetch(url, options = {}) {
         throw lastError;
       }
     } finally {
-      // Runs after success, abort, network failure, or an HTTP error.
       clearTimeout(timeoutId);
     }
   }
